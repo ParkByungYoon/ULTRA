@@ -290,6 +290,8 @@ class TransductiveDataset(InMemoryDataset):
         train_files = self.raw_paths[:3]
 
         train_results = self.load_file(train_files[0], inv_entity_vocab={}, inv_rel_vocab={})
+
+        self.save_vocab(train_results["inv_entity_vocab"], train_results["inv_rel_vocab"])
         valid_results = self.load_file(train_files[1], 
                         train_results["inv_entity_vocab"], train_results["inv_rel_vocab"])
         test_results = self.load_file(train_files[2],
@@ -332,6 +334,16 @@ class TransductiveDataset(InMemoryDataset):
             test_data = self.pre_transform(test_data)
 
         torch.save((self.collate([train_data, valid_data, test_data])), self.processed_paths[0])
+
+    def save_vocab(self, entity_dict, relation_dict):
+        with open(f'{self.raw_dir}/entity.dict', 'w') as f:
+            for ent,id in entity_dict.items():
+                f.write(f'{id}\t{ent}\n')
+
+        with open(f'{self.raw_dir}/relation.dict', 'w') as f:
+            for rel,id in relation_dict.items():
+                f.write(f'{id}\t{rel}\n')
+
 
     def __repr__(self):
         return "%s()" % (self.name)
@@ -1093,3 +1105,19 @@ class JointDataset(InMemoryDataset):
         # ]
 
         torch.save((train_data, valid_data, test_data), self.processed_paths[0])
+
+
+class CustomTransductiveDataset(TransductiveDataset):
+
+    urls = [
+        "https://raw.githubusercontent.com/ParkByungYoon/ULTRA/main/custom/train.txt",
+        "https://raw.githubusercontent.com/ParkByungYoon/ULTRA/main/custom/inference_graph.txt",
+        "https://raw.githubusercontent.com/ParkByungYoon/ULTRA/main/custom/inference_graph.txt",
+    ]
+    name = "custom_data"
+    delimiter = "\t"
+
+    def download(self):
+        for url, path in zip(self.urls, self.raw_paths):
+            download_path = download_url(url, self.raw_dir)
+            os.rename(download_path, path)
