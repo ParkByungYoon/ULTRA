@@ -26,6 +26,16 @@ class Ultra(nn.Module):
         return score
 
 
+    def visualize(self, data, batch):
+        
+        # batch shape: (bs, 1+num_negs, 3)
+        # relations are the same all positive and negative triples, so we can extract only one from the first triple among 1+nug_negs
+        query_rels = batch[:, 0, 2]
+        relation_representations = self.relation_model(data.relation_graph, query=query_rels)
+
+        return self.entity_model.visualize(data, relation_representations, batch.squeeze(0))
+
+
 # NBFNet to work on the graph of relations with 4 fundamental interactions
 # Doesn't have the final projection MLP from hidden dim -> 1, returns all node representations 
 # of shape [bs, num_rel, hidden]
@@ -207,6 +217,17 @@ class EntityNBFNet(BaseNBFNet):
         # (batch_size, num_negative + 1, dim) -> (batch_size, num_negative + 1)
         score = self.mlp(feature).squeeze(-1)
         return score.view(shape)
+
+    def visualize(self, data, relation_representations, batch):
+
+        # initial query representations are those from the relation graph
+        self.query = relation_representations
+
+        # initialize relations in each NBFNet layer (with uinque projection internally)
+        for layer in self.layers:
+            layer.relation = relation_representations
+
+        return super().visualize(data, batch)
 
 
 class QueryNBFNet(EntityNBFNet):
