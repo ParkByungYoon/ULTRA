@@ -164,3 +164,6 @@ output/
 .DS_Store
 kg-datasets/
 *.csv
+paths
+notebooks
+.gitignore
