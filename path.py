@@ -31,8 +31,8 @@ def extract_relation_path(paths, relation_vocab, relation_paths=set()):
         relation_list = []
         for h, t, r in path:
             r_name = relation_vocab[r % num_relation]
-            if r >= num_relation:
-                r_name += "^(-1)"
+            # if r >= num_relation:
+            #     r_name += "^(-1)"
             relation_list.append(r_name)
         relation_paths.add(tuple(relation_list))  # extract relation path
     return relation_paths
@@ -62,6 +62,7 @@ def build_vocab(graph):
 
 if __name__ == "__main__":
     class args:
+        data_name = "cwq"
         seed=1024
         dataset = 'CustomTransductiveDataset'
         gpus =0
@@ -70,10 +71,15 @@ if __name__ == "__main__":
         bpe = 'null'
         epochs = '0'
         rel_topk = 1
-        path_topk = 3
-        save_dir = "/home/bonbak/ULTRA/paths/cwq"
+        path_topk = 2
+        max_hop = 2 if data_name == "webqsp" else 4
+        save_dir = f"/home/bonbak/ULTRA/paths/{data_name}/rel{rel_topk}-path{path_topk}"
+        
 
-    webqsp_dataset = load_dataset("rmanluo/RoG-cwq", cache_dir="/SSL_NAS/concrete/data/webqsp")['train']
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
+
+    question_dataset = load_dataset(f"rmanluo/RoG-{args.data_name}")['train']
     cfg = load_yaml(args)
     model = Ultra(
         rel_model_cfg=cfg.model.relation_model,
@@ -89,21 +95,13 @@ if __name__ == "__main__":
 
     model.eval()
 
-    # with open(f'{args.save_dir}/qid2path.json', 'w') as f: 
-    #     f.write('')
-
-    result = {}
-    with open(f'{args.save_dir}/qid2path.json', 'r') as f:
-        for line in f:
-            data = json.loads(line)
-            result[data['qid']] = data['path']
+    with open(f'{args.save_dir}/{args.data_name}_train.jsonl', 'w') as f: 
+        f.write('')
+    with open(f'{args.save_dir}/{args.data_name}_qid2path.jsonl', 'w') as f:
+        f.write('')
         
-    for row in tqdm(webqsp_dataset):
-        if row['id'] in result:
-            continue
-
-        result_dict = {}
-        if len(row['q_entity']) * len(row['a_entity']) > 10:
+    for row in tqdm(question_dataset):
+        if len(row['q_entity']) != 1 or len(row['a_entity']) != 1:
             continue
         
         triplets, inv_entity_vocab, inv_rel_vocab = build_vocab(row['graph'])
@@ -165,8 +163,18 @@ if __name__ == "__main__":
         del data
         torch.cuda.empty_cache()
         
-        result_dict['qid'] = row['id']
-        result_dict['path'] = list(map(list, relation_paths))
-        
-        with open(f'{args.save_dir}/qid2path.json', 'a') as f:
-            f.write(json.dumps(result_dict) + '\n')
+        relation_paths = [list(rel_path) for rel_path in relation_paths if len(rel_path) <= args.max_hop]
+    
+        qid2path = {}
+        qid2path['qid'] = row['id']
+        qid2path['path'] = relation_paths
+        with open(f'{args.save_dir}/{args.data_name}_qid2path.jsonl', 'a') as f:
+            f.write(json.dumps(qid2path) + '\n')
+
+        result_dict = {}
+        result_dict['question'] = row['question']
+        with open(f'{args.save_dir}/{args.data_name}_train.jsonl', 'a') as f:
+            for rel_path in relation_paths:
+                if len(rel_path) == 0: continue
+                result_dict['path'] = rel_path
+                f.write(json.dumps(result_dict) + '\n')
